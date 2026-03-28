@@ -1,0 +1,63 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: keycloak_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-keycloak}
+      POSTGRES_USER: ${POSTGRES_USER:-keycloak}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keycloak_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-keycloak} -d ${POSTGRES_DB:-keycloak}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - keycloak_net
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    container_name: keycloak
+    restart: unless-stopped
+    command: start-dev
+    environment:
+      # Admin credentials
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KC_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD:-admin}
+      # Database
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-keycloak}
+      KC_DB_USERNAME: ${POSTGRES_USER:-keycloak}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-keycloak_password}
+      # Hostname
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: ${KEYCLOAK_PORT:-8080}
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      # HTTP
+      KC_HTTP_ENABLED: true
+      KC_HTTP_PORT: 8080
+      # Logging
+      KC_LOG_LEVEL: ${KC_LOG_LEVEL:-INFO}
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./themes:/opt/keycloak/themes          # custom themes (optional)
+      - ./providers:/opt/keycloak/providers    # custom JAR providers (optional)
+    networks:
+      - keycloak_net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  keycloak_net:
+    driver: bridge
